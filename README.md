@@ -1,4 +1,4 @@
-# debut_age_viz
+# Trends in K-Pop Idols' Debut Ages
 
 I have been a fan of K-pop music for more than five years. Nowadays, I came to realize how young the K-Pop idols debuted: the youngest idol who debuted in 2023 was only 14 years old. I was curious about whether idols from the 1990s also debuted this young or whether there was a lowering trend in debut ages.
 
