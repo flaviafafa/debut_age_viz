@@ -1,0 +1,722 @@
+---
+title: "Are K-Pop idols debuting too young nowadays?"
+author: "Flavia Jiang"
+date: "2023-03-02"
+output: 
+  pdf_document: 
+    latex_engine: xelatex
+---
+
+Note: Not all graphs created in this file were presented in the article. For some reasons, Chinese characters failed to display in the code chunks when knitted to pdf. However, they still appeared in the graphs.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(dplyr)
+library(ggplot2)
+library(showtext)
+library(tidyr)
+library(ggrepel)
+showtext_auto()
+```
+
+# Default styles for ggplot2
+
+```{r}
+style <- theme_light() +
+  theme(
+    axis.title = element_text(color = "#737373", size = 11),
+    axis.text = element_text(size = 9, color = "#737373"),
+    legend.title = element_text(color = "#737373", size = 11),
+    legend.text = element_text(color = "#737373", size = 9),
+    plot.title = element_text(
+      color = "#737373",
+      size = 15,
+      margin = margin(10, 0, 10, 0)
+    ),
+    axis.title.x = element_text(margin = margin(
+      t = 7,
+      r = 0,
+      b = 7,
+      l = 0
+    )),
+    axis.title.y = element_text(margin = margin(
+      t = 0,
+      r = 7,
+      b = 0,
+      l = 7
+    )),
+    plot.caption = element_text(color = "#737373", size = 9)
+  )
+```
+
+# Data cleaning
+
+## Data by idol
+
+```{r}
+dat <- read.csv("debut_age.csv")
+# The memberdat dataframe: one idol per row
+memberdat <- pivot_longer(dat,
+                          cols = 6:28,
+                          names_to = "member",
+                          values_to = 'age')
+memberdat <- filter(memberdat,!is.na(age))
+head(memberdat)
+```
+
+## Data by group
+
+Variables:
+
+-   average: average debut age of the group
+-   numMember: number of members
+-   ageSum: sum of debut ages of the members 
+-   sd: standard deviation of debut ages 
+-   adult: number of members aged 18 or above when debutting / numMember
+
+```{r}
+# The groupdat dataframe: one group per row
+groupdat <-
+  summarise(
+    group_by(memberdat, group),
+    average = mean(age),
+    numMember = n(),
+    ageSum = sum(age),
+    sd = sd(age),
+    company = unique(company)[1],
+    gender = unique(gender)[1],
+    show = unique(show)[1],
+    adult = sum(age >= 18) / n(),
+    debut_year = unique(debut_year)[1]
+  )
+head(groupdat)
+```
+
+# Basic statistics (overall)
+
+## Distribution of debut age
+
+```{r}
+median(memberdat$age)
+mean(memberdat$age)
+ggplot(data = memberdat, aes(x = age)) + geom_histogram(breaks = 14:29) + style
+```
+
+## Distribution of debut age by debut year
+
+```{r}
+year_mean <-
+  summarize(group_by(memberdat, debut_year),
+            average = mean(age),
+            count = n())[4:21, ]
+year_median <-
+  summarize(group_by(memberdat, debut_year),
+            median = median(age),
+            count = n())[4:21, ]
+
+ggplot(data = memberdat, aes(x = debut_year, y = age)) +
+  geom_jitter(width = 0.02, height = 0.3) +
+  style
+
+sum_member <-
+  summarize(group_by(memberdat, debut_year, age), count = n())
+ggplot() +
+  geom_point(
+    data = sum_member,
+    aes(x = debut_year, y = age, size = count),
+    color = "#a78bfa",
+    alpha = 0.5
+  ) +
+  style +
+  geom_hline(
+    yintercept = c(19, 18.89),
+    linetype = "dashed",
+    size  = 0.5,
+    color = c("#fb7185", "#38bdf8"),
+    alpha = 0.5
+  ) +
+  geom_path(
+    data = year_median,
+    color = "#fb7185",
+    alpha = 0.6,
+    size = 1,
+    aes(x = debut_year, y = median)
+  )  + labs(x = "出道年份",
+            y = "出道年龄",
+            size = "出道人数",
+            title = "出道年龄分布基本情况（以艺人为单位）") +
+  geom_path(
+    data = year_mean,
+    color = "#38bdf8",
+    alpha = 0.6,
+    size = 1,
+    aes(x = debut_year, y = average)
+  ) +
+  geom_label(aes(x = 2001.5, y = 19.8, label = "中位数: 19"),
+             color = "#fb7185",
+             size = 3.5) +
+  geom_label(
+    aes(x = 2001.5, y = 18.1, label = "平均数: 18.89"),
+    color = "#38bdf8",
+    size = 3.5
+  ) +
+  geom_label(aes(x  = 2005.2, y = 29, label = "最大出道年龄: 29"),
+             color = "#a78bfa",
+             size = 3.5) +
+  geom_label(aes(x = 2012.2, y = 14, label = "最小出道年龄: 14"),
+             color = "#a78bfa",
+             size = 3.5) +
+  scale_y_continuous(breaks = seq(from = 14, to = 28, by = 2)) +
+  scale_x_continuous(breaks = seq(from = 1996, to = 2022, by = 2))
+
+ggsave("debut_age_distribution.png",
+       plot = last_plot(),
+       device = png)
+
+ggplot(data = year_mean) +
+  geom_path(
+    color = "#c4b5fd",
+    arrow = arrow(),
+    size = 1.5,
+    aes(x = debut_year, y = average)
+  ) +
+  geom_point(
+    aes(x = debut_year, y = average, size = count),
+    color = "#a78bfa",
+    alpha = .8
+  )  +
+  style
+
+ggplot(data = year_median) +
+  geom_path(
+    color = "#c4b5fd",
+    arrow = arrow(),
+    size = 1.5,
+    aes(x = debut_year, y = median)
+  ) +
+  geom_point(
+    aes(x = debut_year, y = median, size = count),
+    color = "#a78bfa",
+    alpha = .8
+  )  +
+  style
+```
+
+## Distribution of group average debut ages
+
+```{r}
+ggplot(data = groupdat, aes(x = average)) +
+  geom_histogram(fill = "#ddd6fe") +
+  style
+
+head(groupdat[order(groupdat$average), ])
+```
+
+```{r, fig.height = 4.5, width = 6}
+ggplot(data = groupdat, aes(x = debut_year, y = average)) +
+  geom_point(color = "#8b5cf6") +
+  geom_label(
+    label = groupdat$group,
+    nudge_x = 0.1,
+    nudge_y = 0.1,
+    size = 2.5,
+    color = "#8b5cf6"
+  ) +
+  labs(
+    x = "出道年份",
+    y = "平均出道年龄",
+    title = "出道年龄分布情况（以团体为单位）",
+    caption = "注: NCT的分队NCT DREAM平均出道年龄为15.6。此处只显示大队数据。\n注: 长方形部分可见下方放大图。"
+  ) +
+  style +
+  scale_y_continuous(breaks = 16:22) +
+  scale_x_continuous(breaks = seq(from = 1996, to = 2022, by = 2)
+  ) +
+  geom_rect(
+    aes(
+      xmin = 2014,
+      xmax = 2020,
+      ymin = 18,
+      ymax = 20
+    ),
+    fill = NA,
+    color = "#a3a3a3",
+    linetype = "dashed"
+  ) +
+  geom_label(aes(x = 2001.5, y = 19.2, label = "中位数: 19"),
+             color = "#fb7185",
+             size = 2.5) +
+  geom_label(
+    aes(x = 2001.5, y = 18.6, label = "平均数: 18.81"),
+    color = "#38bdf8",
+    size = 2.5
+  ) +
+  geom_hline(
+    yintercept = c(19, 18.81),
+    linetype = "dashed",
+    size = 0.5,
+    color = c("#fb7185", "#38bdf8"),
+    alpha = 0.6
+  )
+
+ggsave("group_mean_debut_age.png",
+       plot = last_plot(),
+       device = png)
+
+ggplot(data = groupdat, aes(x = debut_year, y = average)) +
+  geom_point(color = "#8b5cf6") +
+  geom_label_repel(
+    label = groupdat$group,
+    size = 3,
+    color = "#8b5cf6",
+    fill = NA,
+    max.overlaps = 20,
+    min.segment.length = 1
+  ) +
+  ylim(c(18, 20)) + xlim(c(2014, 2020)) +
+  style +
+  labs(x = "出道年份", y = "平均出道年龄", title = "出道年龄分布情况（以团体为单位）") +
+  geom_hline(
+    yintercept = c(19, 18.81),
+    linetype = "dashed",
+    size = 0.5,
+    color = c("#fb7185", "#38bdf8"),
+    alpha = 0.6
+  ) +
+  geom_label(aes(x = 2019, y = 19, label = "中位数: 19"),
+             color = "#fb7185",
+             size = 3) +
+  geom_label(aes(x = 2019, y = 18.8, label = "平均数: 18.81"),
+             color = "#38bdf8",
+             size = 3)
+
+ggsave("group_mean_debut_age_zoomed_in.png",
+       plot = last_plot(),
+       device = png)
+```
+
+## Distribution of debut age standard deviations within groups
+
+```{r}
+ggplot(data = groupdat, aes(x = sd)) +
+  geom_histogram(fill = "#ddd6fe") +
+  labs(x = "各团出道年龄方差",  y = "频率") +
+  theme_light() +
+  theme(axis.title = element_text(colour = "#4b5563", size = 12),
+        axis.text = element_text(size = 11))
+
+filter(groupdat, sd > 3) # 2NE1, After School, Le Sserafim, WannaOne, X1, Kepler
+filter(groupdat, sd < 0.7)
+```
+
+```{r, fig.height = 4, width = 6}
+ggplot(data = groupdat, aes(x = debut_year, y = sd)) +
+  geom_point(color = "#8b5cf6") +
+  geom_label(
+    label = groupdat$group,
+    nudge_x = 0.2,
+    nudge_y = 0.1,
+    size = 2.5,
+    color = "#8b5cf6",
+  ) + theme_light()
+
+summarize(group_by(memberdat, group), diff = max(age) - min(age))
+```
+
+## Distribution of adult rates
+
+```{r}
+ggplot(data = groupdat, aes(x = adult)) + 
+  geom_histogram( fill = "#ddd6fe") +
+  labs( x = "各团出道成年比例",  y = "频率", caption = "注：18岁为成年。", title = "各团出道成年比例分布") +
+  theme_light() + 
+  style +
+  geom_vline(xintercept = 0.75, linetype = "dashed", size = 1, color = c("#fb7185"), alpha = 0.6)+
+  geom_label(aes(x = 0.75, y = 10, label = "中位数: 0.75"), color= "#fb7185", size  = 4) 
+
+ggsave(
+  "adult_percentage.png",
+  plot = last_plot(),
+  device = png)
+
+filter( groupdat, adult == 1) 
+filter( groupdat, adult == 0) # Only one: S.E.S.
+median( groupdat$adult)
+```
+
+# Analysis by gender
+
+```{r}
+ggplot() +
+  geom_histogram(
+    data = memberdat,
+    aes(x = age, fill = gender),
+    position = "identity",
+    alpha = 0.5,
+    breaks = 14:29
+  ) +
+  style +
+  labs(x = "出道年龄",
+       y = "频率",
+       fill = "性别",
+       title = "出道年龄分布与性别（以个人为单位）") +
+  geom_label(
+    aes(x = 25.5, y  = 42, label = "男爱豆平均出道年龄: 19.1"),
+    color = "#38bdf8",
+    size  = 4
+  ) +
+  geom_label(
+    aes(x = 25.5, y = 37, label = "女爱豆平均出道年龄: 18.6"),
+    color = "#fb7185",
+    size  = 4
+  ) +
+  scale_fill_manual(values = c("#fb7185", "#38bdf8"))
+
+ggsave("debut_age_by_gender_bar.png",
+       plot = last_plot(),
+       device = png)
+
+mean(filter(memberdat, gender == "F")$age)
+median(filter(memberdat, gender == "F")$age)
+mean(filter(memberdat, gender == "M")$age)
+median(filter(memberdat, gender == "M")$age)
+
+t.test(
+  filter(memberdat, gender == "F")$age,
+  filter(memberdat, gender == "M")$age,
+  alternative = "less"
+)
+
+```
+
+## Average debut age
+
+```{r pressure, echo=TRUE}
+dat_f <- filter(groupdat, gender == "F")
+sum(dat_f$ageSum) / sum(dat_f$numMember) # 18.6
+median(dat_f$average) # 19
+
+dat_m <- filter(groupdat, gender == "M")
+sum(dat_m$ageSum) / sum(dat_m$numMember) # 19
+median(dat_m$average) # 19
+
+ggplot(data = groupdat, aes(x = debut_year, y = average, color = gender)) +
+  geom_point(alpha = 0.7) +
+  style +
+  labs(
+    caption = "注: NCT的小分队NCT DREAM出道平均年龄为15.6岁。图上只显示NCT全体的平均年龄。",
+    title = "各团平均出道年龄与性别（以团体为单位）",
+    x = "出道年份",
+    y = "平均出道年龄",
+    color = "性别"
+  ) +
+  scale_color_manual(values = c("#fb7185", "#38bdf8"))
+
+ggsave("debut_age_by_gender_scatterplot.png",
+       plot = last_plot(),
+       device = png)
+
+ggplot(data = memberdat, aes(x = debut_year, y = age, color = gender)) +
+  geom_jitter(alpha = 0.7) +
+  style +
+  labs(
+    caption = "注: NCT的小分队NCT DREAM出道平均年龄为15.6岁。图上只显示NCT全体的平均年龄。",
+    title = "各团平均出道年龄与性别（以个人为单位）",
+    x = "出道年份",
+    y = "平均出道年龄",
+    color = "性别"
+  ) +
+  scale_color_manual(values = c("#fb7185", "#38bdf8"))
+
+ggplot(data = groupdat, aes(x = debut_year, y = average, color = gender)) + geom_point() +
+  geom_label(
+    label = groupdat$group,
+    nudge_x = 0.2,
+    nudge_y = 0.1,
+    size = 2.5
+  ) + style
+
+ggplot(data = groupdat, aes(x = average, fill = gender)) + geom_histogram(alpha = 0.5, position = "identity")
+
+t.test(dat_f$average, dat_m$average, alternative = "less")
+# one-tail test: p-value < 0.1 -> different means
+
+filter(memberdat, gender == "F", age <= 14)
+filter(memberdat, gender == "M", age <= 14)
+```
+
+-   Median is the same. The difference between means is statistically significant.
+
+## SD of debut ages within groups
+
+```{r}
+median(dat_m$sd)
+median(dat_f$sd)
+
+ggplot(data = groupdat, aes(x = sd, fill = gender))+ 
+  geom_histogram(alpha = 0.5, position = "identity")+
+  style +
+  scale_fill_manual( values = c("#fb7185", "#38bdf8")) +
+  labs(title = "团内年龄标准方差与性别", x = "年龄标准方差", y = "频率", fill = "性别")
+
+ggsave(
+  "stddev_by_gender.png",
+  plot = last_plot(),
+  device = png)
+
+t.test(dat_m$sd, dat_f$sd, alternative = "less")
+```
+
+## Adult rate
+
+```{r}
+ggplot(data = groupdat, aes(x = adult , fill = gender)) +
+  geom_histogram(alpha = 0.5, position = "identity")
+t.test(dat_f$adult, dat_m$adult, alternative = "less")
+```
+
+# Analysis by company
+
+## Average debut age
+
+```{r, fig.height = 4}
+ggplot(data = groupdat, aes(x = debut_year, y = average, color = company)) + geom_point() +
+  geom_label(
+    label = groupdat$company,
+    nudge_x = 0.2,
+    nudge_y = 0.1,
+    label.size = 0.4,
+    size = 2.5
+  ) + style +
+  labs(
+    title = "各团出道平均年龄与所属公司",
+    x = "出道年份",
+    y = "出道平均年龄",
+    color = "所属公司",
+    caption = "注: 被HYBE收购的公司历代的团体都算在HYBE。"
+  )
+
+ggsave("group_mean_debut_age_by_company.png",
+       plot = last_plot(),
+       device = png)
+
+summarize(group_by(memberdat, company), avg = mean(age))
+```
+
+## Adult rate
+
+```{r, fig.height = 4}
+ggplot(data = groupdat, aes(x = debut_year, y = adult, color = company)) + geom_point() +
+  geom_label(
+    label = groupdat$company,
+    nudge_x = 0.2,
+    nudge_y = 0.02,
+    size = 2.5
+  ) + style
+
+summarize(group_by(groupdat, company),
+          total = sum(numMember * adult) / sum(numMember))
+```
+
+# Talent show or not
+
+## Average debut age
+
+```{r}
+dat_y <- filter(groupdat, show == "Y")
+dat_n <- filter(groupdat, show == "N")
+median(dat_y$average)
+median(dat_n$average)
+
+mean(dat_y$average)
+mean(dat_n$average)
+
+t.test(dat_y$average, dat_m$average, alternative = "less") # p-value is 0.12.
+
+ggplot(data = groupdat, aes(x = debut_year, y = average, color = show)) + geom_point() + style
+```
+
+## SD
+
+```{r}
+ggplot(data = groupdat, aes(x = debut_year, y = sd, color = show)) + geom_point() + style
+```
+
+## Adult rate
+
+```{r}
+ggplot(data = groupdat, aes(x = debut_year, y = adult, color = show)) + geom_point() + style
+```
+
+# Analysis by generation
+
+-   1st gen: - 2005
+-   2nd gen: 2005 - 2009
+-   3rd gen: 2010 - 2014
+-   4th gen: 2015 - 2018
+-   5th gen: 2019 - present
+
+```{r}
+groupdat$gen <- NA
+groupdat[groupdat$debut_year < 2005, ]$gen <- 1
+groupdat[groupdat$debut_year < 2010 & groupdat$debut_year > 2004, ]$gen <- 2
+groupdat[groupdat$debut_year < 2015 & groupdat$debut_year > 2009, ]$gen <- 3
+groupdat[groupdat$debut_year < 2019 & groupdat$debut_year > 2014, ]$gen <- 4
+groupdat[groupdat$debut_year > 2018, ]$gen <- 5
+
+memberdat$gen <- NA
+memberdat[memberdat$debut_year < 2005, ]$gen <- 1
+memberdat[memberdat$debut_year < 2010 & memberdat$debut_year > 2004, ]$gen <- 2
+memberdat[memberdat$debut_year < 2015 & memberdat$debut_year > 2009, ]$gen <- 3
+memberdat[memberdat$debut_year < 2019 & memberdat$debut_year > 2014, ]$gen <- 4
+memberdat[memberdat$debut_year > 2018, ]$gen <- 5
+```
+
+## Average debut age
+
+```{r}
+summarize(group_by(memberdat, gen), median = median(age))
+summarize(group_by(memberdat, gen), average = mean(age))
+
+ggplot(data = groupdat, aes(x = debut_year, y = average, color = factor(gen))) +
+  geom_point(alpha = 1, size = 1.5) + style +
+  scale_x_continuous(breaks = c(1995, 2005, 2010, 2015, 2019)) +
+  labs(
+    title = "各团平均出道年龄与年代",
+    y = "平均出道年龄",
+    x = "出道年份",
+    color = "出道年代",
+    caption = "注: 2代与4代平均出道年龄线重合。"
+  )  +
+  scale_color_manual(
+    values = c("#fb923c", "#facc15", "#a3e635", "#22d3ee", "#a78bfa"),
+    labels = c("1代", "2代", "3代", "4代", "5代")
+  )  +
+  geom_hline(
+    yintercept = c(17.64, 18.93, 19.36, 18.94, 18.45),
+    linetype = "dashed",
+    size = 0.5,
+    color = c("#fb923c", "#facc15", "#a3e635", "#22d3ee", "#a78bfa")
+  )
+
+ggsave(
+  "group_mean_debut_age_by_generation.png",
+  plot = last_plot(),
+  device = png)
+
+four <- filter(memberdat, gen == 4)
+five <- filter(memberdat, gen == 5)
+t.test(four$age, five$age, alternative = "greater")
+```
+
+## Adult rate
+
+```{r}
+summarize(group_by(groupdat, gen),
+          adult = sum(numMember * adult) / sum(numMember))
+ggplot(data = groupdat, aes(x = debut_year, y = adult, color = factor(gen))) + geom_point() + style
+```
+
+# Analysis by company and gender
+
+```{r}
+sum_avg <- summarize(group_by(groupdat, company, gender), average = sum(ageSum)/sum(numMember))
+sum_avg
+summarize(group_by(groupdat, company, gender),  median = median(average))
+
+sum_adult <- summarize(group_by(groupdat, company, gender),adult=sum(numMember*adult)/sum(numMember))
+```
+
+1.  average by company by gender
+
+-   CUBE: male(20.3) - female(18.2) = 2.1
+-   HYBE: male(18.1) - female(19.2) = -1.1
+-   JYP: male(19.2) - female(17.8) = 1.4
+-   OTHER: 0.5
+
+2.  median
+
+-   CUBE: male(22.2) - female(17.9) = 2.3
+
+3.  adult%
+
+-   CUBE: male(0.94) - female(0.65) = 0.29!!!
+-   HYBE: female \> male
+-   JYP: male(0.85) - female(0.66) = 0.19
+-   OTHER: female \< male
+
+```{r}
+ggplot(data = sum_avg, aes(x = company, y = average - 14, fill = gender)) +
+  geom_bar(stat = "identity",
+           position = position_dodge(),
+           width = 0.8) +
+  scale_fill_manual(values = c('#fecdd3', '#bae6fd')) + style +
+  geom_text(
+    aes(label = format(round(average, 2), nsmall = 2)),
+    vjust = 1.6,
+    color = "#6b7280",
+    position = position_dodge(0.9),
+    size = 3,
+    fontface = "bold"
+  ) +
+  labs(title = "艺人平均出道年龄与公司+性别",
+       x = "所属公司",
+       y = "平均出道年龄",
+       fill = "性别") +
+  scale_y_continuous(labels = c("14", "16", "18", "20"),
+                     breaks = c(0, 2, 4, 6))
+
+ggsave(
+  "mean_debut_age_by_company_and_gender.png",
+  plot = last_plot(),
+  device = png)
+```
+
+```{r}
+ggplot(data=sum_adult, aes(x = company, y = adult, fill=gender)) +
+geom_bar(stat="identity", position=position_dodge()) +
+scale_fill_manual(values=c('#fecdd3','#bae6fd')) + style +
+    geom_text(aes(label= format(round(adult,2), nsmall = 2)), vjust=1.6, color="#6b7280",
+            position = position_dodge(0.9), size=3.5, fontface = "bold") +
+  labs(title = "艺人出道成年率与公司+性别", x = "所属公司", y = "出道成年率", fill = "性别")
+
+ggsave(
+  "adult_percentage_by_company_and_gender.png",
+  plot = last_plot(),
+  device = png)
+```
+
+# Analysis by gender and generation
+
+```{r}
+sum_avg <- summarize(group_by(memberdat, gen, gender), average = mean(age), count = n())
+sum_adult <- summarize(group_by(groupdat, gen, gender),  adult = sum(numMember*adult) / sum(numMember))
+sum_avg
+sum_adult
+```
+
+```{r}
+ggplot(data = sum_avg) + geom_path(aes(x = gen, y = average, color = gender),
+                                   size = 1.5,
+                                   arrow = arrow()) + geom_point(aes(
+                                     x = gen,
+                                     y = average,
+                                     color = gender,
+                                     size = count
+                                   )) + style +
+  scale_color_manual(values = c('#fecdd3', '#bae6fd')) +
+  labs(
+    title = "艺人平均出道年龄与年代+性别",
+    x = "出道年代",
+    y = "平均出道年龄",
+    color = "性别",
+    size = "出道人数"
+  )
+
+ggsave(
+  "mean_debut_age_by_generation_and_gender.png",
+  plot = last_plot(),
+  device = png)
+
+mean(filter(memberdat,gender=="F",gen==4)$age) - mean(filter(memberdat,gender=="M",gen==4)$age)
+```
